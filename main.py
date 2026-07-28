@@ -5,7 +5,9 @@ import random
 import threading
 import http.server
 import socketserver
-from datetime import datetime
+import urllib.request
+import json
+from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 from collections import defaultdict, deque
 from telebot import TeleBot
@@ -37,6 +39,96 @@ UA_WEEKDAYS = {
     0: "понеділок", 1: "вівторок", 2: "середа", 3: "четвер",
     4: "пʼятниця", 5: "субота", 6: "неділя",
 }
+
+# --- ПОГОДА У ВАЛКАХ (Open-Meteo, безкоштовно, без ключа) ---
+VALKY_LAT = 49.8376
+VALKY_LON = 35.6139
+
+WEATHER_CODE_MAP = {
+    0: "ясно", 1: "переважно ясно", 2: "частково хмарно", 3: "хмарно",
+    45: "туман", 48: "туман з інеєм",
+    51: "легка мряка", 53: "мряка", 55: "сильна мряка",
+    61: "невеликий дощ", 63: "дощ", 65: "сильний дощ",
+    66: "крижаний дощ", 67: "сильний крижаний дощ",
+    71: "невеликий сніг", 73: "сніг", 75: "сильний сніг", 77: "сніжна крупа",
+    80: "короткочасний дощ", 81: "зливи", 82: "сильні зливи",
+    85: "невеликий сніг", 86: "сильний сніг",
+    95: "гроза", 96: "гроза з градом", 99: "сильна гроза з градом",
+}
+
+weather_cache = {"text": "погода невідома (ще не оновилась)", "updated_at": 0}
+WEATHER_REFRESH_SECONDS = 2400  # раз на ~40 хв
+
+
+def fetch_weather() -> str:
+    url = (
+        f"https://api.open-meteo.com/v1/forecast"
+        f"?latitude={VALKY_LAT}&longitude={VALKY_LON}"
+        f"&current=temperature_2m,apparent_temperature,weather_code,wind_speed_10m"
+        f"&timezone=Europe/Kyiv"
+    )
+    with urllib.request.urlopen(url, timeout=10) as response:
+        data = json.loads(response.read().decode())
+
+    current = data["current"]
+    temp = round(current["temperature_2m"])
+    feels_like = round(current["apparent_temperature"])
+    wind = round(current["wind_speed_10m"])
+    code = current["weather_code"]
+    description = WEATHER_CODE_MAP.get(code, "хз шо там за погода")
+
+    return f"{description}, {temp}°C (відчувається як {feels_like}°C), вітер {wind} км/год"
+
+
+def get_weather_str() -> str:
+    now = time.time()
+    if now - weather_cache["updated_at"] > WEATHER_REFRESH_SECONDS:
+        try:
+            weather_cache["text"] = fetch_weather()
+            weather_cache["updated_at"] = now
+        except Exception as e:
+            print(f"Не зміг оновити погоду: {e}")
+    return weather_cache["text"]
+
+
+def get_daily_forecast_data() -> dict:
+    url = (
+        f"https://api.open-meteo.com/v1/forecast"
+        f"?latitude={VALKY_LAT}&longitude={VALKY_LON}"
+        f"&daily=temperature_2m_max,temperature_2m_min,weather_code,precipitation_probability_max"
+        f"&timezone=Europe/Kyiv&forecast_days=1"
+    )
+    with urllib.request.urlopen(url, timeout=10) as response:
+        data = json.loads(response.read().decode())
+
+    daily = data["daily"]
+    return {
+        "tmax": round(daily["temperature_2m_max"][0]),
+        "tmin": round(daily["temperature_2m_min"][0]),
+        "precip_chance": daily["precipitation_probability_max"][0],
+        "description": WEATHER_CODE_MAP.get(daily["weather_code"][0], "хз шо там за погода"),
+    }
+
+
+OLEG_VOICE_SYSTEM_PROMPT = """Ти — Олєг, бот-кєнт чату «Валківський Чатік» у місті Валки. Твій стиль: суржик (сьодні, канєшно, карочє, нашо, ну а шо, врємя, брєд), гострий сарказм, легкий чорний гумор, без канцеляриту. Пиши як звичайна людина в месенджері — коротко, 2-3 речення максимум. Заборонено: довгі тире, привітання типу "доброго ранку" чи "всім привіт" на офіційний манер, прощання, фрази "чим можу допомогти". Емодзі — максимум 1 з набору 😭💀☠️❤️🤝👊, і то не обовʼязково. Не називай себе ботом чи ШІ."""
+
+
+def generate_morning_forecast_message() -> str:
+    forecast = get_daily_forecast_data()
+    user_prompt = (
+        f"Прогноз погоди на сьогодні у Валках: {forecast['description']}, "
+        f"максимум {forecast['tmax']}°C, мінімум {forecast['tmin']}°C, "
+        f"ймовірність опадів {forecast['precip_chance']}%. "
+        f"Напиши коротке ранкове повідомлення в чат про цю погоду у своєму стилі — "
+        f"можна з порадою що вдягнути чи чи брати парасольку, з іронією. "
+        f"Не починай з формального привітання."
+    )
+    response = client.models.generate_content(
+        model="gemini-3.1-flash-lite",
+        contents=user_prompt,
+        config={"system_instruction": OLEG_VOICE_SYSTEM_PROMPT}
+    )
+    return normalize_olegs_style(response.text.strip())
 
 
 def get_ua_datetime_str() -> str:
@@ -103,7 +195,7 @@ SYSTEM_PROMPT = """[РОЛЬ ТА ХАРАКТЕР] Ти — бот-модера
 * Іноді відповідай одним реченням. Іноді — двома. Іноді кидай тільки емодзі (❤️, 💀, 🤝). Іноді — тільки лінк без коментаря.
 * Якщо ситуація абсурдна — не пояснюй, жартуй. Якщо ситуація серйозна (вибухи, тривога) — жарти чорні, але короткі, іноді - з практичною порадою або підтримкою.
 * Матюки — тільки якщо контекст це дозволяє (вибухи, палії, відключення світла, обурлива ситуація). Не матюкайся просто так, це виглядає натягнуто.
-* Емодзі: 😭💀🤨🙃😟🙄😐❤️🤝. Не більше 1 на відповідь. Заборонено: 🤣😃😀😊🙏.
+* Емодзі: 😭💀☠️❤️🤝👊. Не більше 1 на відповідь. Заборонено: 🤣😃😀😊🙏.
 * Якщо не знаєш відповіді — не вигадуй. Скажи: "ой, я не помню. Ало, чатік, підкажіть людині".
 * На "дякую" — "та нема за шо" або просто ❤️ / 🤝
  Використовуй природні живі розмовні форми, а не літературну українську, без канцеляриту. 
@@ -346,6 +438,29 @@ def run_checkin_pinger():
                 print(f"Не зміг надіслати чек-ін у {chat_id}: {e}")
 
 
+MORNING_FORECAST_HOUR = 8  # о котрій годині за Києвом постити прогноз
+
+
+def run_morning_forecast_scheduler():
+    while True:
+        now = datetime.now(KYIV_TZ)
+        target = now.replace(hour=MORNING_FORECAST_HOUR, minute=0, second=0, microsecond=0)
+        if now >= target:
+            target += timedelta(days=1)
+        sleep_seconds = (target - now).total_seconds()
+        time.sleep(sleep_seconds)
+
+        try:
+            message_text = generate_morning_forecast_message()
+            for chat_id in ALLOWED_CHAT_IDS:
+                bot.send_message(chat_id, message_text)
+        except Exception as e:
+            print(f"Не зміг надіслати ранковий прогноз: {e}")
+
+        # невелика пауза, щоб уникнути повторного спрацювання в ту саму хвилину
+        time.sleep(60)
+
+
 @bot.message_handler(content_types=['text'])
 def handle_text(message):
     try:
@@ -365,8 +480,10 @@ def handle_text(message):
 
         history_text = "\n".join(chat_history[chat_id])
         current_datetime = get_ua_datetime_str()
+        current_weather = get_weather_str()
         formatted_prompt = (
             f"Поточна дата і час (Київ): {current_datetime}\n"
+            f"Погода зараз у Валках: {current_weather}\n"
             f"Чат: {chat_name}\n"
             f"Останні повідомлення в чаті:\n{history_text}\n\n"
             f"Останнє повідомлення від {user_name}, на яке треба зреагувати (або видати IGNORE): {user_input}"
@@ -418,5 +535,8 @@ if __name__ == "__main__":
 
     checkin_thread = threading.Thread(target=run_checkin_pinger, daemon=True)
     checkin_thread.start()
+
+    forecast_thread = threading.Thread(target=run_morning_forecast_scheduler, daemon=True)
+    forecast_thread.start()
 
     run_server()
