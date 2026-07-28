@@ -273,7 +273,7 @@ def handle_text(message):
 CHECKIN_MESSAGES = [
     "Шо ви, як ви? 👋",
     "Чатік, шо ви?",
-    "Дєнь такий собі, нормальний. Як у вас там?",
+    "🤙🏻"
 ]
 
 CHECKIN_MIN_HOURS = 36
