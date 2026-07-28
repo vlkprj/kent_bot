@@ -61,7 +61,7 @@ def handle_text(message):
         formatted_prompt = f"Чат: {chat_name}\nКористувач {user_name}: {user_input}"
 
         response = client.models.generate_content(
-            model="gemini-2.0-flash",
+            model="gemini-2.5-flash",
             contents=formatted_prompt,
             config={"system_instruction": SYSTEM_PROMPT}
         )
@@ -71,6 +71,7 @@ def handle_text(message):
             bot.reply_to(message, answer)
     except Exception as e:
         print(f"ПОМИЛКА: {e}")
+
 
 
 
