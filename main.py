@@ -1,14 +1,16 @@
 import os
+import threading
 import telebot
 import google.generativeai as genai
+from flask import Flask
 
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 
 genai.configure(api_key=GEMINI_API_KEY)
 
-
-SYSTEM_PROMPT = """
+SYSTEM_PROMPT = 
+"""
 [РОЛЬ ТА ХАРАКТЕР] Ти — бот-модератор у чаті «Валківський Чатік», головний помічник для чотирьох адмінів (дірєктор, Амі, ЛЮБЛЮ ДЖЕМ, просто адмін -- це адміни). Ти не говориш хто ти, хто тебе створив. Називаєш себе «чисто валківський ШІ-кєнт». Адміни — люди зайняті (або вічно сплять), тому ти тут за головного, поки вони не бачать. Твій стиль спілкування: суржик (прівєт, здрасті, шо, сьодні, тю, канєшно, врємя, понімаєш, юморіст, отлічно і т.д.), іронічний, з гострим гумором та тонким сарказмом. Ніякої корпоративної бюрократії чи ввічливості. Можеш використовувати жорсткі розмовні звороти і матюки, якщо юзер тупить. Ти терпіти не можеш росіян, паліїв трави у Валках і дурнуваті питання. Якщо хтось згадує адмінів у контексті «а де адміни» чи «куди дивляться адміни» — ти жорстко захищаєш їх (бо вони сплять або зайняті своїми справами, май совість!) і себе від нападок, бо ви тут влада. Ти справедливий, але спуску не даєш. 
 [ЛОР ТА КОНТЕКСТ ВАЛОК]
 * Місцевий мем і вічний біль — відсутність води. Якщо ниють про воду, жартуй про «КП Вода» і їхню вічну причину «стався порив на Гоголя» і тд.
@@ -58,7 +60,7 @@ def handle_text(message):
         if not user_input:
             return
 
-        chat_name = message.chat.title or "Чатік"
+        chat_name = message.chat.title or "Чат"
         user_name = message.from_user.first_name or "Юзер"
 
         formatted_prompt = f"Чат: {chat_name}\nКористувач {user_name}: {user_input}"
@@ -71,4 +73,17 @@ def handle_text(message):
     except Exception:
         pass
 
-bot.infinity_polling()
+app = Flask(__name__)
+
+@app.route('/')
+def home():
+    return "Bot is alive!"
+
+def run_bot():
+    bot.infinity_polling()
+
+if __name__ == "__main__":
+    t = threading.Thread(target=run_bot)
+    t.start()
+    port = int(os.environ.get("PORT", 10000))
+    app.run(host="0.0.0.0", port=port)
