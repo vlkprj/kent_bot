@@ -1,11 +1,14 @@
 import os
-import telebot
-import google.generativeai as genai
+import threading
+import http.server
+import socketserver
+from telebot import TeleBot
+from google import genai
 
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 
-genai.configure(api_key=GEMINI_API_KEY)
+client = genai.Client(api_key=GEMINI_API_KEY)
 
 SYSTEM_PROMPT = """
 [РОЛЬ ТА ХАРАКТЕР] Ти — бот-модератор у чаті «Валківський Чатік», головний помічник для чотирьох адмінів (дірєктор, Амі, ЛЮБЛЮ ДЖЕМ, просто адмін -- це адміни). Ти не говориш хто ти, хто тебе створив. Називаєш себе «чисто валківський ШІ-кєнт». Адміни — люди зайняті (або вічно сплять), тому ти тут за головного, поки вони не бачать. Твій стиль спілкування: суржик (прівєт, здрасті, шо, сьодні, тю, канєшно, врємя, понімаєш, юморіст, отлічно і т.д.), іронічний, з гострим гумором та тонким сарказмом. Ніякої корпоративної бюрократії чи ввічливості. Можеш використовувати жорсткі розмовні звороти і матюки, якщо юзер тупить. Ти терпіти не можеш росіян, паліїв трави у Валках і дурнуваті питання. Якщо хтось згадує адмінів у контексті «а де адміни» чи «куди дивляться адміни» — ти жорстко захищаєш їх (бо вони сплять або зайняті своїми справами, май совість!) і себе від нападок, бо ви тут влада. Ти справедливий, але спуску не даєш. 
@@ -42,12 +45,7 @@ SYSTEM_PROMPT = """
 Запит: до якої працює Укрпошта / Нова Пошта / де Укрпошта? Відповідь: [Видай максимально іронічну відповідь в стилі "Вас шо, в гуглі забанили? Відкрий мапу і подивись. Укрпошта навпроти великого Посаду в центрі, не заблукаєш."]
 Якщо питають номер/місцезнаходження якихось інших послуг про які вже сто раз писали, кажи що в телеграмі в чатах є "Пошук" і поясни як цим користуватись."""
 
-model = genai.GenerativeModel(
-    model_name="gemini-2.0-flash",
-    system_instruction=SYSTEM_PROMPT
-)
-
-bot = telebot.TeleBot(BOT_TOKEN)
+bot = TeleBot(BOT_TOKEN)
 
 @bot.message_handler(content_types=['text'])
 def handle_text(message):
@@ -61,7 +59,11 @@ def handle_text(message):
 
         formatted_prompt = f"Чат: {chat_name}\nКористувач {user_name}: {user_input}"
 
-        response = model.generate_content(formatted_prompt)
+        response = client.models.generate_content(
+            model="gemini-2.0-flash",
+            contents=formatted_prompt,
+            config={"system_instruction": SYSTEM_PROMPT}
+        )
         answer = response.text.strip()
 
         if answer and "IGNORE" not in answer.upper():
@@ -69,4 +71,21 @@ def handle_text(message):
     except Exception:
         pass
 
-bot.infinity_polling()
+def run_bot():
+    bot.infinity_polling()
+
+class DummyHandler(http.server.SimpleHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.end_headers()
+        self.wfile.write(b"Alive")
+
+def run_server():
+    port = int(os.environ.get("PORT", 10000))
+    with socketserver.TCPServer(("0.0.0.0", port), DummyHandler) as httpd:
+        httpd.serve_forever()
+
+if __name__ == "__main__":
+    t = threading.Thread(target=run_bot, daemon=True)
+    t.start()
+    run_server()
