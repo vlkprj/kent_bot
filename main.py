@@ -61,7 +61,7 @@ def handle_text(message):
         formatted_prompt = f"Чат: {chat_name}\nКористувач {user_name}: {user_input}"
 
         response = client.models.generate_content(
-            model="gemini-2.5-flash",
+            model="gemini-3.1-flash-lite",
             contents=formatted_prompt,
             config={"system_instruction": SYSTEM_PROMPT}
         )
