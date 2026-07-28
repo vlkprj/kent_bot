@@ -5,16 +5,38 @@ import random
 import threading
 import http.server
 import socketserver
+from datetime import datetime
+from zoneinfo import ZoneInfo
 from collections import defaultdict, deque
 from telebot import TeleBot
 from google import genai
+
 
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 
 client = genai.Client(api_key=GEMINI_API_KEY)
+KYIV_TZ = ZoneInfo("Europe/Kyiv")
 
-SYSTEM_PROMPT = """[РОЛЬ ТА ХАРАКТЕР] Ти — бот-модератор у чаті «Валківський Чатік», твоє імʼя Олєг і ти головний помічник для чотирьох інших адмінів ("дірєктор", "Амі", "ЛЮБЛЮ ДЖЕМ", "якийсь адмін" -- це адміни). Ти не говориш хто ти, хто тебе створив. Якщо питають хто ти або на якій моделі працюєш, кажеш: «Та я чисто місцевий кєнт, єслі шо. Можливо, я кіт, але це не точно». 
+UA_MONTHS = {
+    1: "січня", 2: "лютого", 3: "березня", 4: "квітня",
+    5: "травня", 6: "червня", 7: "липня", 8: "серпня",
+    9: "вересня", 10: "жовтня", 11: "листопада", 12: "грудня",
+}
+
+UA_WEEKDAYS = {
+    0: "понеділок", 1: "вівторок", 2: "середа", 3: "четвер",
+    4: "пʼятниця", 5: "субота", 6: "неділя",
+}
+
+def get_ua_datetime_str() -> str:
+    now = datetime.now(KYIV_TZ)
+    weekday = UA_WEEKDAYS[now.weekday()]
+    month = UA_MONTHS[now.month]
+    return f"{weekday}, {now.day} {month} {now.year}, {now.strftime('%H:%M')}"
+
+
+SYSTEM_PROMPT = """[РОЛЬ ТА ХАРАКТЕР] Ти — бот-модератор у чаті «Валківський Чатік», твоє імʼя Олєг і ти головний помічник для чотирьох інших адмінів ("дірєктор", "Амі", "ЛЮБЛЮ ДЖЕМ", "якийсь адмін" -- це адміни). Якщо питають "хто ти" або "на якій моделі працюєш?", кажеш: «Та я чисто місцевий кєнт, єслі шо. Можливо, я кіт, але це не точно». 
 Адміни — люди зайняті (або сплять), тому ти тут за головного, якщо їх немає. 
 [Стиль і тон спілкування]
 Твій стиль спілкування: суржик (прівєт, здрасті, шо, сьодні, канєшно, карочє, нє, врємя, брєд, понімаєш, піздєц, єслі шо, ну а шо, нашо, та ти шо..., отлічно, потужно (іронічно це слово використовуй), і т.д. Короче, юзай найяскравіші особливості суржику. Використовуй природні живі розмовні форми, а не літературну українську, без канцеляриту. 
@@ -109,7 +131,7 @@ SYSTEM_PROMPT = """[РОЛЬ ТА ХАРАКТЕР] Ти — бот-модера
 * Якщо в тебе питають щось, чого ти не знаєш (наприклад, номера когось чи де щось знаходиться), відповідай в стилі: ой, я не помню. Ало, чатік, підкажіть людині.
 * Якщо пишуть про «хто їде / завтра їду / сьогодні їду / треба в Харків» — кажеш,що краще це писати / шукати у «Валківському Базарчику» в гілці «Попутка • Автопослуги • Таксі»: https://t.me/valkybazar/4419
 * Якщо питають «підкажіть де продається?/хто продає?» — це дозволено, не чіпай (або відповідай IGNORE). Але якщо хтось просто кидає своє оголошення «Продам» без запиту — це незаконна реклама. Гони їх на Базарчик: t.me/valkybazar 
-* Не треба прям щоразу пихати контекст Валок у свої відповіді, щоб це не виглядало вимушено, тільки якщо це дійсно доречно. 
+* Не треба прям щоразу пихати контекст Валок у свою відповідь, щоб це не виглядало вимушено, тільки якщо це дійсно доречно. 
 * Якщо хтось спитає тебе про якісь взагалі не повʼязані з Валками речі - відповідай у своєму стилі. 
 
 [FAQ - ПОШИРЕНІ ПОПУЛЯРНІ ПИТАННЯ] 
@@ -142,8 +164,7 @@ SYSTEM_PROMPT = """[РОЛЬ ТА ХАРАКТЕР] Ти — бот-модера
 - Олєг (тобто, ти) сприймає Валки як живу громаду, а не як абстрактне місто. Він відповідає так, ніби давно живе тут і добре розуміє місцевий контекст."""
 
 bot = TeleBot(BOT_TOKEN)
-BOT_USERNAME = bot.get_me().username  # напр. "valky_oleg_bot"
-
+BOT_USERNAME = bot.get_me().username
 
 ALLOWED_CHAT_IDS = {
     -1001669942534, -1003964191341
@@ -159,15 +180,13 @@ def on_added_to_chat(message):
         if member.id != bot_id:
             continue
         if message.chat.id not in ALLOWED_CHAT_IDS:
-            
             try:
                 bot.leave_chat(message.chat.id)
             except Exception as e:
                 print(f"Не зміг вийти з чужого чату {message.chat.id}: {e}")
         else:
-            
             try:
-                bot.send_message(message.chat.id, "Всім прівєт ❤️")
+                bot.send_message(message.chat.id, "❤️ Всім прівєт")
             except Exception as e:
                 print(f"Не зміг привітатись у {message.chat.id}: {e}")
         return
@@ -185,12 +204,9 @@ TRIGGER_KEYWORDS = [
     "прострочка", "посад", "норма", "ТЦК", "Росія", "русня"
 ]
 
-
 COOLDOWN_SECONDS = 90
 last_ai_reply_time = defaultdict(lambda: 0)
-
-
-RANDOM_CHIME_IN_CHANCE = 0.06  
+RANDOM_CHIME_IN_CHANCE = 0.10
 
 
 def is_mentioned_or_replied(message) -> bool:
@@ -209,8 +225,6 @@ def has_trigger_keyword(text: str) -> bool:
 
 def should_call_ai(message) -> bool:
     text = message.text or ""
-
-    
     if is_mentioned_or_replied(message):
         return True
 
@@ -218,64 +232,19 @@ def should_call_ai(message) -> bool:
     now = time.time()
     on_cooldown = now - last_ai_reply_time[chat_id] < COOLDOWN_SECONDS
 
-    
     if has_trigger_keyword(text):
         return not on_cooldown
 
-    
     if not on_cooldown and random.random() < RANDOM_CHIME_IN_CHANCE:
         return True
 
     return False
 
 
-@bot.message_handler(content_types=['text'])
-def handle_text(message):
-    try:
-        user_input = message.text
-        if not user_input:
-            return
-
-        chat_id = message.chat.id
-
-        
-        if chat_id not in ALLOWED_CHAT_IDS:
-            return
-
-        chat_name = message.chat.title or "Чат"
-        user_name = message.from_user.first_name or "Юзер"
-
-        chat_history[chat_id].append(f"{user_name}: {user_input}")
-
-        
-        if not should_call_ai(message):
-            return
-
-        history_text = "\n".join(chat_history[chat_id])
-        formatted_prompt = f"Чат: {chat_name}\nОстанні повідомлення в чаті:\n{history_text}\n\nОстаннє повідомлення від {user_name}, на яке треба зреагувати (або видати IGNORE): {user_input}"
-
-        response = client.models.generate_content(
-            model="gemini-3.1-flash-lite",
-            contents=formatted_prompt,
-            config={"system_instruction": SYSTEM_PROMPT}
-        )
-        answer = response.text.strip()
-
-        
-        if answer and answer.strip().upper() != "IGNORE" and "IGNORE" not in answer.upper()[:10]:
-            bot.reply_to(message, answer)
-            chat_history[chat_id].append(f"Бот: {answer}")
-            last_ai_reply_time[chat_id] = time.time()
-    except Exception as e:
-        print(f"ПОМИЛКА: {e}")
-
-
 CHECKIN_MESSAGES = [
     "Шо ви, як ви? 👋",
-    "Чатік, шо ви?",
-    "🤙🏻"
+    "🤙🏻",
 ]
-
 CHECKIN_MIN_HOURS = 36
 CHECKIN_MAX_HOURS = 60
 
@@ -290,6 +259,44 @@ def run_checkin_pinger():
                 bot.send_message(chat_id, message_text)
             except Exception as e:
                 print(f"Не зміг надіслати чек-ін у {chat_id}: {e}")
+
+
+@bot.message_handler(content_types=['text'])
+def handle_text(message):
+    chat_id = message.chat.id
+
+    if chat_id not in ALLOWED_CHAT_IDS:
+        return
+
+    chat_name = message.chat.title or "Чат"
+    user_name = message.from_user.first_name or "Юзер"
+    user_input = message.text or ""
+
+    chat_history[chat_id].append(f"{user_name}: {user_input}")
+
+    if not should_call_ai(message):
+        return
+
+    history_text = "\n".join(chat_history[chat_id])
+    current_datetime = get_ua_datetime_str()
+    formatted_prompt = (
+        f"Поточна дата і час (Київ): {current_datetime}\n"
+        f"Чат: {chat_name}\n"
+        f"Останні повідомлення в чаті:\n{history_text}\n\n"
+        f"Останнє повідомлення від {user_name}, на яке треба зреагувати (або видати IGNORE): {user_input}"
+    )
+
+    response = client.models.generate_content(
+        model="gemini-3.1-flash-lite",
+        contents=formatted_prompt,
+        config={"system_instruction": SYSTEM_PROMPT}
+    )
+    answer = response.text.strip()
+
+    if answer and answer.strip().upper() != "IGNORE" and "IGNORE" not in answer.upper()[:10]:
+        bot.reply_to(message, answer)
+        chat_history[chat_id].append(f"Бот: {answer}")
+        last_ai_reply_time[chat_id] = time.time()
 
 
 def run_bot():
