@@ -69,7 +69,8 @@ def handle_text(message):
         if answer and "IGNORE" not in answer.upper():
             bot.reply_to(message, answer)
     except Exception as e:
-    print(f"ПОМИЛКА: {e}")
+        print(f"ПОМИЛКА: {e}")
+
 
 def run_bot():
     bot.infinity_polling()
