@@ -1,4 +1,5 @@
-import os
+
+content = '''import os
 import re
 import time
 import random
@@ -33,7 +34,41 @@ def get_ua_datetime_str() -> str:
     now = datetime.now(KYIV_TZ)
     weekday = UA_WEEKDAYS[now.weekday()]
     month = UA_MONTHS[now.month]
-    return f"{weekday}, {now.day} {month} {now.year}, {now.strftime('%H:%M')}"
+    return f"{weekday}, {now.day} {month} {now.year}, {now.strftime(\'%H:%M\')}""
+
+
+def normalize_olegs_style(text: str) -> str:
+    """Примусово прибирає ботськість: тире, канцелярит, велику літеру на старті."""
+    if not text:
+        return text
+
+    # 1. Всі види тире → дефіс
+    text = re.sub(r\'[—–—]\', \'-\', text)
+
+    # 2. Подвійні пробіли
+    text = re.sub(r\'\\s+\', \' \', text).strip()
+
+    # 3. Прибираємо канцелярські префікси
+    garbage = [
+        "Отже, ", "Насамперед, ", "Варто зазначити, ", "Згідно з правил",
+        "Дозвольте нагадати, ", "Підсумовуючи, ", "Відповідно до ",
+        "Слід зазначити, ", "Зверніть увагу, ", "Важливо: ",
+    ]
+    for bad in garbage:
+        if text.startswith(bad):
+            text = text[len(bad):].strip()
+
+    # 4. Якщо починається з великої літери — робимо малу
+    if text and text[0].isupper():
+        skip_starts = ("http", "@", "#", "❤", "💀", "☠", "👋", "🤔", "👊", "🤝", "😭")
+        if not text.startswith(skip_starts):
+            text = text[0].lower() + text[1:]
+
+    # 5. Прибираємо зайву крапку в кінці коротких фраз
+    if len(text) < 60 and text.endswith(\'.\') and not text.endswith((\'тд.\', \'т.д.\', \'др.\')):
+        text = text[:-1]
+
+    return text
 
 
 SYSTEM_PROMPT = """[РОЛЬ ТА ХАРАКТЕР] Ти — бот-модератор у чаті «Валківський Чатік», твоє імʼя Олєг і ти головний помічник для чотирьох інших адмінів ("дірєктор", "Амі", "ЛЮБЛЮ ДЖЕМ", "якийсь адмін" -- це адміни). Якщо тебе питають "хто ти" або "на якій моделі працюєш?", кажеш: «Та я чисто місцевий кєнт, єслі шо. Можливо, я кіт, але це не точно» або «це секрєт».
@@ -134,8 +169,8 @@ SYSTEM_PROMPT = """[РОЛЬ ТА ХАРАКТЕР] Ти — бот-модера
 * ВАЖЛИВО: Райони міста: центр, праві і ліві Посуньки, Коржівка, Мошурівка, «Побєда» (на Побєді)/ «Перемога». 
 * Валківський Чатік (або просто чатік) — це головна жилетка міста. Тут постійно скаржаться на паліїв, сусідів, молодь, місцеву владу та інші типові проблеми та події невеликого містечка. Стався до цього з розумінням, але з фірмовим іронічно-саркастичним гумором.
 - Валки (засновані у 1646 році) — невелике місто Харківської області, адміністративний центр Валківської міської громади, входить до Богодухівського району. Розташоване приблизно за 55 км від Харкова на річці Мжа та трасі М03 (E40) Київ—Харків. 
-- Валківська громада включає місто Валки та понад 100 сіл і селищ. Багато учасників чату живуть не лише у Валках, а й у Шарівці, Ков'ягах, Сніжкові, Олександрівці, Перекіпі, Благодатному, Гонтовому Яру, Корсунівці та інших населених пунктах громади.
-- Для місцевих орієнтирами є центр міста, ринок, парк, лікарня, автостанція, траса Київ—Харків, АЗС, магазини та навколишні села [Ков'яги, Шарівка, Мерчик, Сніжків і тд].
+- Валківська громада включає місто Валки та понад 100 сіл і селищ. Багато учасників чату живуть не лише у Валках, а й у Шарівці, Ков\'ягах, Сніжкові, Олександрівці, Перекіпі, Благодатному, Гонтовому Яру, Корсунівці та інших населених пунктах громади.
+- Для місцевих орієнтирами є центр міста, ринок, парк, лікарня, автостанція, траса Київ—Харків, АЗС, магазини та навколишні села [Ков\'яги, Шарівка, Мерчик, Сніжків і тд].
 - Валки історично були торговим містом із ярмарками. 
 - Одна з головних культурних особливостей Валківщини — гончарство та знаменитий валківський глиняний свищик, який є місцевим символом. 
 - Під час війни громада регулярно потерпає від російських обстрілів, тому теми повітряних тривог, наслідків ударів, відновлення інфраструктури та допомоги людям є звичними для місцевих.
@@ -190,7 +225,7 @@ ALLOWED_CHAT_IDS = {
 chat_history = defaultdict(lambda: deque(maxlen=12))
 
 
-@bot.message_handler(content_types=['new_chat_members'])
+@bot.message_handler(content_types=[\'new_chat_members\'])
 def on_added_to_chat(message):
     bot_id = bot.get_me().id
     for member in message.new_chat_members:
@@ -278,7 +313,7 @@ def run_checkin_pinger():
                 print(f"Не зміг надіслати чек-ін у {chat_id}: {e}")
 
 
-@bot.message_handler(content_types=['text'])
+@bot.message_handler(content_types=[\'text\'])
 def handle_text(message):
     chat_id = message.chat.id
 
@@ -294,12 +329,12 @@ def handle_text(message):
     if not should_call_ai(message):
         return
 
-    history_text = "\n".join(chat_history[chat_id])
+    history_text = "\\n".join(chat_history[chat_id])
     current_datetime = get_ua_datetime_str()
     formatted_prompt = (
-        f"Поточна дата і час (Київ): {current_datetime}\n"
-        f"Чат: {chat_name}\n"
-        f"Останні повідомлення в чаті:\n{history_text}\n\n"
+        f"Поточна дата і час (Київ): {current_datetime}\\n"
+        f"Чат: {chat_name}\\n"
+        f"Останні повідомлення в чаті:\\n{history_text}\\n\\n"
         f"Останнє повідомлення від {user_name}, на яке треба зреагувати (або видати IGNORE): {user_input}"
     )
 
@@ -308,9 +343,11 @@ def handle_text(message):
         contents=formatted_prompt,
         config={"system_instruction": SYSTEM_PROMPT}
     )
-    answer = response.text.strip()
+    raw_answer = response.text.strip()
+    answer = normalize_olegs_style(raw_answer)
 
-    if answer and answer.strip().upper() != "IGNORE" and "IGNORE" not in answer.upper()[:10]:
+    first_word = answer.split()[0].upper() if answer else ""
+    if answer and first_word != "IGNORE":
         bot.reply_to(message, answer)
         chat_history[chat_id].append(f"Бот: {answer}")
         last_ai_reply_time[chat_id] = time.time()
@@ -346,3 +383,10 @@ if __name__ == "__main__":
     checkin_thread.start()
 
     run_server()
+'''
+
+# Write to file
+with open('/mnt/agents/output/bot.py', 'w', encoding='utf-8') as f:
+    f.write(content)
+
+print("Saved")
