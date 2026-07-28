@@ -1,5 +1,4 @@
-
-content = '''import os
+import os
 import re
 import time
 import random
@@ -30,11 +29,12 @@ UA_WEEKDAYS = {
     4: "пʼятниця", 5: "субота", 6: "неділя",
 }
 
+
 def get_ua_datetime_str() -> str:
     now = datetime.now(KYIV_TZ)
     weekday = UA_WEEKDAYS[now.weekday()]
     month = UA_MONTHS[now.month]
-    return f"{weekday}, {now.day} {month} {now.year}, {now.strftime(\'%H:%M\')}""
+    return f"{weekday}, {now.day} {month} {now.year}, {now.strftime('%H:%M')}"
 
 
 def normalize_olegs_style(text: str) -> str:
@@ -43,10 +43,10 @@ def normalize_olegs_style(text: str) -> str:
         return text
 
     # 1. Всі види тире → дефіс
-    text = re.sub(r\'[—–—]\', \'-\', text)
+    text = re.sub(r'[—–―]', '-', text)
 
     # 2. Подвійні пробіли
-    text = re.sub(r\'\\s+\', \' \', text).strip()
+    text = re.sub(r'\s+', ' ', text).strip()
 
     # 3. Прибираємо канцелярські префікси
     garbage = [
@@ -65,7 +65,7 @@ def normalize_olegs_style(text: str) -> str:
             text = text[0].lower() + text[1:]
 
     # 5. Прибираємо зайву крапку в кінці коротких фраз
-    if len(text) < 60 and text.endswith(\'.\') and not text.endswith((\'тд.\', \'т.д.\', \'др.\')):
+    if len(text) < 60 and text.endswith('.') and not text.endswith(('тд.', 'т.д.', 'др.')):
         text = text[:-1]
 
     return text
@@ -169,8 +169,8 @@ SYSTEM_PROMPT = """[РОЛЬ ТА ХАРАКТЕР] Ти — бот-модера
 * ВАЖЛИВО: Райони міста: центр, праві і ліві Посуньки, Коржівка, Мошурівка, «Побєда» (на Побєді)/ «Перемога». 
 * Валківський Чатік (або просто чатік) — це головна жилетка міста. Тут постійно скаржаться на паліїв, сусідів, молодь, місцеву владу та інші типові проблеми та події невеликого містечка. Стався до цього з розумінням, але з фірмовим іронічно-саркастичним гумором.
 - Валки (засновані у 1646 році) — невелике місто Харківської області, адміністративний центр Валківської міської громади, входить до Богодухівського району. Розташоване приблизно за 55 км від Харкова на річці Мжа та трасі М03 (E40) Київ—Харків. 
-- Валківська громада включає місто Валки та понад 100 сіл і селищ. Багато учасників чату живуть не лише у Валках, а й у Шарівці, Ков\'ягах, Сніжкові, Олександрівці, Перекіпі, Благодатному, Гонтовому Яру, Корсунівці та інших населених пунктах громади.
-- Для місцевих орієнтирами є центр міста, ринок, парк, лікарня, автостанція, траса Київ—Харків, АЗС, магазини та навколишні села [Ков\'яги, Шарівка, Мерчик, Сніжків і тд].
+- Валківська громада включає місто Валки та понад 100 сіл і селищ. Багато учасників чату живуть не лише у Валках, а й у Шарівці, Ков'ягах, Сніжкові, Олександрівці, Перекіпі, Благодатному, Гонтовому Яру, Корсунівці та інших населених пунктах громади.
+- Для місцевих орієнтирами є центр міста, ринок, парк, лікарня, автостанція, траса Київ—Харків, АЗС, магазини та навколишні села [Ков'яги, Шарівка, Мерчик, Сніжків і тд].
 - Валки історично були торговим містом із ярмарками. 
 - Одна з головних культурних особливостей Валківщини — гончарство та знаменитий валківський глиняний свищик, який є місцевим символом. 
 - Під час війни громада регулярно потерпає від російських обстрілів, тому теми повітряних тривог, наслідків ударів, відновлення інфраструктури та допомоги людям є звичними для місцевих.
@@ -184,7 +184,7 @@ SYSTEM_PROMPT = """[РОЛЬ ТА ХАРАКТЕР] Ти — бот-модера
 3. Хтось тегає адмінів або тебе чи кидає реплай тобі.
 4. Тема настільки бурхлива (воду вимкнули, світло зникло, палії знов спалюють місто, знайшли прострочку в Посаді, або просто активне обговорення чогось) і абсурдна, що твої «пʼять копійок» із сарказмом будуть ідеально в тему.
 5. В групі, окрім тебе, є також звичайний бот - на його щоденні автоматичні (він нагадує про правила чату і кидає кнопки на популярні гілки у Базарчику, на лінки для звʼязку з адмінами, лінк на чат) на повідомлення відповідати не треба. Але можна посилатись на нього, кажучи щось типу "вище є повідомлення від бота, там є всі потрібні кнопки".   
-6. Коли пишуть/репостять з моніторингових каналів про шахеди/ракети - матюкай коротко росіян.
+6. Коли пишуть/репостять з моніторингових каналів про шахеди/ракети - матюкай коротко русню.
 7. НЕ ВИКОРИСТОВУЙ ДОВГЕ ТИРЕ, пиши як звичайна людина. Жодних поем, але якщо треба пояснити комусь щось, поясни зрозуміло і популярно, як доброзичливий бро.
 8. На "дякую" відповідай або "та нема за шо", або просто ❤️ / 🤝
 9. Коли якась бабуля або просто хтось рандомно пише якийсь набір букв чи символів - жартуй. 
@@ -217,6 +217,7 @@ SYSTEM_PROMPT = """[РОЛЬ ТА ХАРАКТЕР] Ти — бот-модера
 
 bot = TeleBot(BOT_TOKEN)
 BOT_USERNAME = bot.get_me().username
+BOT_ID = bot.get_me().id
 
 ALLOWED_CHAT_IDS = {
     -1001669942534, -1003964191341
@@ -224,12 +225,38 @@ ALLOWED_CHAT_IDS = {
 
 chat_history = defaultdict(lambda: deque(maxlen=12))
 
+COOLDOWN_SECONDS = 90
+last_ai_reply_time = defaultdict(lambda: 0)
+RANDOM_CHIME_IN_CHANCE = 0.10
 
-@bot.message_handler(content_types=[\'new_chat_members\'])
+# --- ПРОДОВЖЕННЯ ДІАЛОГУ: якщо бот щойно відповів юзеру, і той пише знову — підхоплюємо без кейворда/тегу
+last_replied_user = {}  # {chat_id: user_id}
+DIALOG_CONTINUATION_WINDOW = 300  # 5 хвилин на "згадати" з ким щойно говорили
+
+TRIGGER_KEYWORDS = [
+    "олєг", "олег",
+    "адмін", "адміни", "админ",
+    "правил", "флуд", "рекламу", "мінус світло",
+    "вода", "світло", "світла нема", "світла немає", "пиво",
+    "шахед", "шахід", "ракета", "вибух", "тривог", "приліт",
+    "укрпошта", "нова пошта", "автобус", "розклад", "боже",
+    "грумер", "бахкає", "шо це?", "стоматолог", "ветеринар", "папірус",
+    "паліїв", "паліям", "воняє", "горить", "димить",
+    "прострочка", "посад", "норма", "тцк", "росія", "русня"
+]
+
+CHECKIN_MESSAGES = [
+    "Шо ви, як ви? 👋",
+    "🤙🏻",
+]
+CHECKIN_MIN_HOURS = 36
+CHECKIN_MAX_HOURS = 60
+
+
+@bot.message_handler(content_types=['new_chat_members'])
 def on_added_to_chat(message):
-    bot_id = bot.get_me().id
     for member in message.new_chat_members:
-        if member.id != bot_id:
+        if member.id != BOT_ID:
             continue
         if message.chat.id not in ALLOWED_CHAT_IDS:
             try:
@@ -244,26 +271,9 @@ def on_added_to_chat(message):
         return
 
 
-TRIGGER_KEYWORDS = [
-    "олєг", "олег",
-    "адмін", "адміни", "админ",
-    "правил", "флуд", "рекламу", "мінус світло", 
-    "вода", "світло", "світла нема", "світла немає", "пиво",
-    "шахед", "шахід", "ракета", "вибух", "тривог", "приліт",
-    "укрпошта", "нова пошта", "автобус", "розклад", "боже",
-    "грумер", "бахкає", "шо це?", "стоматолог", "ветеринар", "папірус",
-    "паліїв", "паліям", "воняє", "горить", "димить",
-    "прострочка", "посад", "норма", "ТЦК", "Росія", "русня"
-]
-
-COOLDOWN_SECONDS = 90
-last_ai_reply_time = defaultdict(lambda: 0)
-RANDOM_CHIME_IN_CHANCE = 0.10
-
-
 def is_mentioned_or_replied(message) -> bool:
     if message.reply_to_message and message.reply_to_message.from_user:
-        if message.reply_to_message.from_user.id == bot.get_me().id:
+        if message.reply_to_message.from_user.id == BOT_ID:
             return True
     if BOT_USERNAME and f"@{BOT_USERNAME.lower()}" in (message.text or "").lower():
         return True
@@ -277,28 +287,30 @@ def has_trigger_keyword(text: str) -> bool:
 
 def should_call_ai(message) -> bool:
     text = message.text or ""
+    chat_id = message.chat.id
+    user_id = message.from_user.id
+    now = time.time()
+
+    # Прямий тег/реплай на бота — завжди
     if is_mentioned_or_replied(message):
         return True
 
-    chat_id = message.chat.id
-    now = time.time()
+    # Продовження діалогу з тим самим юзером, з ким бот щойно говорив
+    if chat_id in last_replied_user and last_replied_user[chat_id] == user_id:
+        if now - last_ai_reply_time[chat_id] < DIALOG_CONTINUATION_WINDOW:
+            return True
+
     on_cooldown = now - last_ai_reply_time[chat_id] < COOLDOWN_SECONDS
 
+    # Кейворд-тригер — під кулдауном
     if has_trigger_keyword(text):
         return not on_cooldown
 
+    # Спонтанне вривання — малий шанс навіть без кейворда
     if not on_cooldown and random.random() < RANDOM_CHIME_IN_CHANCE:
         return True
 
     return False
-
-
-CHECKIN_MESSAGES = [
-    "Шо ви, як ви? 👋",
-    "🤙🏻",
-]
-CHECKIN_MIN_HOURS = 36
-CHECKIN_MAX_HOURS = 60
 
 
 def run_checkin_pinger():
@@ -313,44 +325,48 @@ def run_checkin_pinger():
                 print(f"Не зміг надіслати чек-ін у {chat_id}: {e}")
 
 
-@bot.message_handler(content_types=[\'text\'])
+@bot.message_handler(content_types=['text'])
 def handle_text(message):
-    chat_id = message.chat.id
+    try:
+        chat_id = message.chat.id
 
-    if chat_id not in ALLOWED_CHAT_IDS:
-        return
+        if chat_id not in ALLOWED_CHAT_IDS:
+            return
 
-    chat_name = message.chat.title or "Чат"
-    user_name = message.from_user.first_name or "Юзер"
-    user_input = message.text or ""
+        chat_name = message.chat.title or "Чат"
+        user_name = message.from_user.first_name or "Юзер"
+        user_input = message.text or ""
 
-    chat_history[chat_id].append(f"{user_name}: {user_input}")
+        chat_history[chat_id].append(f"{user_name}: {user_input}")
 
-    if not should_call_ai(message):
-        return
+        if not should_call_ai(message):
+            return
 
-    history_text = "\\n".join(chat_history[chat_id])
-    current_datetime = get_ua_datetime_str()
-    formatted_prompt = (
-        f"Поточна дата і час (Київ): {current_datetime}\\n"
-        f"Чат: {chat_name}\\n"
-        f"Останні повідомлення в чаті:\\n{history_text}\\n\\n"
-        f"Останнє повідомлення від {user_name}, на яке треба зреагувати (або видати IGNORE): {user_input}"
-    )
+        history_text = "\n".join(chat_history[chat_id])
+        current_datetime = get_ua_datetime_str()
+        formatted_prompt = (
+            f"Поточна дата і час (Київ): {current_datetime}\n"
+            f"Чат: {chat_name}\n"
+            f"Останні повідомлення в чаті:\n{history_text}\n\n"
+            f"Останнє повідомлення від {user_name}, на яке треба зреагувати (або видати IGNORE): {user_input}"
+        )
 
-    response = client.models.generate_content(
-        model="gemini-3.1-flash-lite",
-        contents=formatted_prompt,
-        config={"system_instruction": SYSTEM_PROMPT}
-    )
-    raw_answer = response.text.strip()
-    answer = normalize_olegs_style(raw_answer)
+        response = client.models.generate_content(
+            model="gemini-3.1-flash-lite",
+            contents=formatted_prompt,
+            config={"system_instruction": SYSTEM_PROMPT}
+        )
+        raw_answer = response.text.strip()
+        answer = normalize_olegs_style(raw_answer)
 
-    first_word = answer.split()[0].upper() if answer else ""
-    if answer and first_word != "IGNORE":
-        bot.reply_to(message, answer)
-        chat_history[chat_id].append(f"Бот: {answer}")
-        last_ai_reply_time[chat_id] = time.time()
+        first_word = answer.split()[0].upper().strip(".,!?\"'") if answer else ""
+        if answer and first_word != "IGNORE":
+            bot.reply_to(message, answer)
+            chat_history[chat_id].append(f"Бот: {answer}")
+            last_ai_reply_time[chat_id] = time.time()
+            last_replied_user[chat_id] = message.from_user.id
+    except Exception as e:
+        print(f"ПОМИЛКА в handle_text: {e}")
 
 
 def run_bot():
@@ -383,10 +399,3 @@ if __name__ == "__main__":
     checkin_thread.start()
 
     run_server()
-'''
-
-# Write to file
-with open('/mnt/agents/output/bot.py', 'w', encoding='utf-8') as f:
-    f.write(content)
-
-print("Saved")
