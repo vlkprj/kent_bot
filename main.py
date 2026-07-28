@@ -2,6 +2,7 @@ import os
 import threading
 import http.server
 import socketserver
+import time
 from telebot import TeleBot
 from google import genai
 
@@ -72,8 +73,16 @@ def handle_text(message):
         print(f"ПОМИЛКА: {e}")
 
 
+
+
 def run_bot():
-    bot.infinity_polling()
+    while True:
+        try:
+            bot.infinity_polling(timeout=30, long_polling_timeout=30)
+        except Exception as e:
+            print(f"Polling впав, перезапускаю через 5 сек: {e}")
+            time.sleep(5)
+
 
 class DummyHandler(http.server.SimpleHTTPRequestHandler):
     def do_GET(self):
