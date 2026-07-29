@@ -465,8 +465,8 @@ def run_checkin_pinger():
                 print(f"Не зміг надіслати чек-ін у {chat_id}: {e}")
 
 
-MORNING_FORECAST_HOUR = 9  # о котрій годині за Києвом постити прогноз
-MORNING_FORECAST_MINUTE = 15  # о котрій хвилині
+MORNING_FORECAST_HOUR = 7  # о котрій годині за Києвом постити прогноз
+MORNING_FORECAST_MINUTE = 10  # о котрій хвилині
 
 
 def run_morning_forecast_scheduler():
