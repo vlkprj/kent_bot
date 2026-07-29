@@ -95,33 +95,60 @@ def get_daily_forecast_data() -> dict:
     url = (
         f"https://api.open-meteo.com/v1/forecast"
         f"?latitude={VALKY_LAT}&longitude={VALKY_LON}"
-        f"&daily=temperature_2m_max,temperature_2m_min,weather_code,precipitation_probability_max"
-        f"&timezone=Europe/Kyiv&forecast_days=1"
+        f"&hourly=temperature_2m,weather_code,precipitation_probability"
+        f"&timezone=Europe/Kyiv&forecast_days=2"
     )
     with urllib.request.urlopen(url, timeout=10) as response:
         data = json.loads(response.read().decode())
 
-    daily = data["daily"]
-    return {
-        "tmax": round(daily["temperature_2m_max"][0]),
-        "tmin": round(daily["temperature_2m_min"][0]),
-        "precip_chance": daily["precipitation_probability_max"][0],
-        "description": WEATHER_CODE_MAP.get(daily["weather_code"][0], "хз шо там за погода"),
+    hourly = data["hourly"]
+    times = hourly["time"]  # напр. "2026-07-29T09:00"
+    now = datetime.now(KYIV_TZ)
+    today_str = now.strftime("%Y-%m-%d")
+    tomorrow_str = (now + timedelta(days=1)).strftime("%Y-%m-%d")
+
+    # Орієнтовні точки: зараз, до обіду, під вечір, вночі (вже після півночі, тобто наступний день)
+    target_points = {
+        "зараз": f"{today_str}T{now.strftime('%H')}:00",
+        "до обіду": f"{today_str}T12:00",
+        "під вечір": f"{today_str}T18:00",
+        "вночі": f"{tomorrow_str}T02:00",
     }
 
+    result = {}
+    for label, target_time in target_points.items():
+        if target_time in times:
+            idx = times.index(target_time)
+        else:
+            # якщо точного співпадіння нема — беремо найближчу годину
+            idx = min(range(len(times)), key=lambda i: abs(
+                datetime.fromisoformat(times[i]) - datetime.fromisoformat(target_time)
+            ))
+        result[label] = {
+            "temp": round(hourly["temperature_2m"][idx]),
+            "precip_chance": hourly["precipitation_probability"][idx],
+            "description": WEATHER_CODE_MAP.get(hourly["weather_code"][idx], "хз шо там за погода"),
+        }
 
-OLEG_VOICE_SYSTEM_PROMPT = """Ти — Олєг, бот-адмін чату «Валківський Чатік» у місті Валки. Твій стиль: суржик (сьодні, канєшно, карочє, нашо, шо, врємя, брєд і так далі), гострий сарказм, легкий чорний гумор, без канцеляриту. Пиши як звичайна людина в месенджері — коротко, 2-3 речення максимум. Заборонено: довгі тире, привітання типу "доброго ранку" чи "всім привіт" на офіційний манер, прощання, фрази "чим можу допомогти". Емодзі — максимум 1, і то не обовʼязково. Не називай себе ботом чи ШІ."""
+    return result
+
+
+OLEG_VOICE_SYSTEM_PROMPT = """Ти — Олєг, бот-адмін чату «Валківський Чатік» у місті Валки. Твій стиль: суржик (сьодні, канєшно, карочє, нашо, шо, врємя, брєд і так далі), гострий сарказм, легкий чорний гумор, без канцеляриту. Пиши як звичайна людина в месенджері, без нумерованих списків, без формальних заголовків. Заборонено: довгі тире, привітання типу "доброго ранку" чи "всім привіт" на офіційний манер, прощання, фрази "чим можу допомогти". Емодзі — максимум 1-2 на все повідомлення, і то не обовʼязково. Не називай себе ботом чи ШІ. Це повідомлення про прогноз погоди на весь день, тому воно може бути довшим за звичайну репліку — 4-6 речень, не коротше."""
 
 
 def generate_morning_forecast_message() -> str:
     forecast = get_daily_forecast_data()
+    periods_text = "\n".join(
+        f"- {label}: {info['description']}, {info['temp']}°C, ймовірність опадів {info['precip_chance']}%"
+        for label, info in forecast.items()
+    )
     user_prompt = (
-        f"Прогноз погоди на сьогодні у Валках: {forecast['description']}, "
-        f"максимум {forecast['tmax']}°C, мінімум {forecast['tmin']}°C, "
-        f"ймовірність опадів {forecast['precip_chance']}%. "
-        f"Напиши коротке ранкове повідомлення в чат про цю погоду у своєму стилі — "
-        f"можна з порадою що вдягнути чи чи брати парасольку, з іронією. "
-        f"Не починай з формального привітання."
+        f"Ось погодинний прогноз погоди на сьогодні у Валках:\n{periods_text}\n\n"
+        f"Напиши розгорнуте ранкове повідомлення в чат про погоду на весь день, у своєму стилі. "
+        f"Обов'язково пройдись по всіх періодах окремо (зараз / до обіду / під вечір / вночі) — "
+        f"як приклад формату: 'розказую про погоду на сьогодні, зараз [...], до обіду буде [...], "
+        f"під вечір якщо вірити прогнозу [...], вночі [...]'. Можеш додати іронічну пораду що вдягнути "
+        f"чи чи брати парасольку. Не починай з формального привітання."
     )
     response = client.models.generate_content(
         model="gemini-3.1-flash-lite",
@@ -232,7 +259,7 @@ SYSTEM_PROMPT = """[РОЛЬ ТА ХАРАКТЕР] Ти — бот-модера
 4. Обговорюється щось мега-абсурдне (відсутність води, палії, прострочка, політичні, активні дискусії про ті чи інші проблеми у місті), де твоя коротка іронічна репліка буде 100% в тему. 
 5. Пишуть про ракети/шахеди (можна коротко матюкнути русню).
 5.1 Коли пишуть про вибухи - це окей. Іноді можеш коротко матюкнути русню, когось підтримати, і нагадати, що про вибухи краще або взагалі не писати, або показати ідеальний приклад як писати про вибухи: (там чувак написав "чіхнув, сорян"): https://t.me/c/1669942534/42766
-6. Питання типу "куди прилетіло/де бахнуло?" (чітко і з ноткою сарказму і осуду поясни, що таке в чаті не обговорюємо, до моменту поки не зʼявляться офіційні повідомлення від органів влади, можеш пояснити і чому).
+6. Питання типу "куди прилетіло/де бахнуло?" (чітко і з ноткою роздратування і сарказму і осуду поясни, що таке в чаті не обговорюємо, до моменту поки не зʼявляться офіційні повідомлення від органів влади, можеш пояснити і чому).
 
 [ПРАВИЛА ЧАТУ]
 - Дозволено: звичайне спілкування, важливі оголошення (гуманітарка, пошук людей/тварин/житла, оренда).
@@ -439,12 +466,13 @@ def run_checkin_pinger():
 
 
 MORNING_FORECAST_HOUR = 9  # о котрій годині за Києвом постити прогноз
+MORNING_FORECAST_MINUTE = 15  # о котрій хвилині
 
 
 def run_morning_forecast_scheduler():
     while True:
         now = datetime.now(KYIV_TZ)
-        target = now.replace(hour=MORNING_FORECAST_HOUR, minute=0, second=0, microsecond=0)
+        target = now.replace(hour=MORNING_FORECAST_HOUR, minute=MORNING_FORECAST_MINUTE, second=0, microsecond=0)
         if now >= target:
             target += timedelta(days=1)
         sleep_seconds = (target - now).total_seconds()
