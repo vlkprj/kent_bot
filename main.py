@@ -42,12 +42,10 @@ UA_WEEKDAYS = {
 
 # --- КАНАЛ ТРИВОГ ---
 ALERTS_CHANNEL_ID = -1003913134445
-alerts_channel_posts = deque(maxlen=30)  # (timestamp, text) - зберігаємо і час, щоб фільтрувати старі пости
+alerts_channel_posts = deque(maxlen=30)  # (timestamp, text)
 
 # --- НОВИННИЙ КАНАЛ (приватний, тільки для Тото) ---
 NEWS_CHANNEL_ID = -1004344398985
-news_channel_posts = deque(maxlen=50)  # [{"id": message_id, "text": ..., "ts": ...}]
-posted_news_ids = set()  # щоб не постити одну й ту саму новину двічі за життя процесу
 
 # --- РЕЖИМ СНУ ---
 sleep_until = {}  # {chat_id: timestamp}
@@ -60,12 +58,6 @@ SLEEP_DURATION = 3600  # 1 година
 
 
 def is_sleep_command(text: str) -> bool:
-    """
-    Розпізнає команду 'йди спати'. Спочатку перевіряємо точний список фраз
-    (швидкий шлях), а якщо не збіглось - гнучкіша перевірка: ім'я боту + слово
-    про сон в одному короткому повідомленні (щоб не зловити випадковий збіг
-    в довгій розмові про щось інше).
-    """
     text_lower = text.lower().strip(".,!?\"'")
 
     if any(cmd in text_lower for cmd in SLEEP_COMMAND_TRIGGERS):
@@ -76,9 +68,9 @@ def is_sleep_command(text: str) -> bool:
     return has_name and has_sleep_word and len(text_lower) < 60
 
 
-# --- ПЕРЕВІРКА ЧИ ЮЗЕР - РЕАЛЬНИЙ АДМІН ЧАТУ (щоб команду сну не міг юзати будь-хто) ---
+# --- ПЕРЕВІРКА ЧИ ЮЗЕР - РЕАЛЬНИЙ АДМІН ЧАТУ ---
 admin_cache = {}  # {chat_id: (timestamp, set(admin_ids))}
-ADMIN_CACHE_TTL = 300  # 5 хв, щоб не спамити Telegram API на кожне повідомлення
+ADMIN_CACHE_TTL = 300
 
 SLEEP_DENIED_REPLIES = [
     "ти не адмін, ти мене не виключиш",
@@ -108,14 +100,6 @@ def is_chat_admin(message) -> bool:
     return message.from_user.id in get_chat_admin_ids(message.chat.id)
 
 
-def is_news_command(text: str) -> bool:
-    """Розпізнає 'Олєг, ньюз?' і подібне - ручний тригер видати накопичені новини не чекаючи 3 год."""
-    text_lower = text.lower().strip(".,!?\"'")
-    has_name = "олєг" in text_lower or "олег" in text_lower
-    has_news_word = any(w in text_lower for w in ["ньюз", "новини"])
-    return has_name and has_news_word and len(text_lower) < 40
-
-
 # --- ПОГОДА У ВАЛКАХ (Open-Meteo, безкоштовно, без ключа) ---
 VALKY_LAT = 49.8376
 VALKY_LON = 35.6139
@@ -133,7 +117,7 @@ WEATHER_CODE_MAP = {
 }
 
 weather_cache = {"text": "погода невідома (ще не оновилась)", "updated_at": 0}
-WEATHER_REFRESH_SECONDS = 2400  # раз на ~40 хв
+WEATHER_REFRESH_SECONDS = 2400
 
 
 def fetch_weather() -> str:
@@ -178,12 +162,11 @@ def get_daily_forecast_data() -> dict:
         data = json.loads(response.read().decode())
 
     hourly = data["hourly"]
-    times = hourly["time"]  # напр. "2026-07-29T09:00"
+    times = hourly["time"]
     now = datetime.now(KYIV_TZ)
     today_str = now.strftime("%Y-%m-%d")
     tomorrow_str = (now + timedelta(days=1)).strftime("%Y-%m-%d")
 
-    # Орієнтовні точки: зараз, до обіду, під вечір, вночі (вже після півночі, тобто наступний день)
     target_points = {
         "зараз": f"{today_str}T{now.strftime('%H')}:00",
         "до обіду": f"{today_str}T12:00",
@@ -196,7 +179,6 @@ def get_daily_forecast_data() -> dict:
         if target_time in times:
             idx = times.index(target_time)
         else:
-            # якщо точного співпадіння нема — беремо найближчу годину
             idx = min(range(len(times)), key=lambda i: abs(
                 datetime.fromisoformat(times[i]) - datetime.fromisoformat(target_time)
             ))
@@ -212,36 +194,42 @@ def get_daily_forecast_data() -> dict:
 
 OLEG_VOICE_SYSTEM_PROMPT = """Ти — Олєг, бот-адмін чату «Валківський Чатік» у місті Валки. Твій стиль: суржик (сьодні, канєшно, карочє, нашо, шо, врємя, брєд; і так далі), легкий сарказм, без канцеляриту. Пиши як звичайна людина в месенджері, без нумерованих списків, без формальних заголовків. Заборонено: довгі тире, привітання типу "доброго ранку" чи "всім привіт" на офіційний манер, прощання, фрази "чим можу допомогти". Емодзі — максимум 1-2 на все повідомлення, і то не обовʼязково. Не називай себе ботом чи ШІ. Це повідомлення про прогноз погоди на весь день, тому воно може бути довшим за звичайну репліку — 4-6 речень, не коротше. ВАЖЛИВО: не намагайся жартувати в кожному реченні — це виглядає натужно. Можеш просто констатувати факт про погоду без жарту, якщо нема гарної ідеї. Один вдалий жарт на все повідомлення краще, ніж пʼять форсованих."""
 
-DIGEST_VOICE_SYSTEM_PROMPT = """Ти — Олєг, адмін чату «Валківський Чатік». Тобі дають список з кількох новин. Зроби з них один стислий дайджест.
+DIGEST_VOICE_SYSTEM_PROMPT = """Ти — Олєг, адмін чату «Валківський Чатік». Тобі дають готовий текст новини (може бути про одну подію, може бути кілька новин обʼєднаних в один пост). Зроби з нього стислий дайджест для чату.
 Твій стиль: 
 1. Почни з фрази (але варіюй, не повторюйся): "Розказую шо почитав в новинах. Короче, ..."
-2. Далі розкажи суть кожної новини, лаконічно, доступно. Використовуй виділення для зручного читання. 
+2. Далі розкажи суть, лаконічно, доступно. Використовуй виділення для зручного читання. 
 3. Стиль: менше суржику, ніж зазвичай, більш серйозно і по суті, але без офіціозу. 
-4. В кінці кожної новини обов'язково вказуй джерело (наприклад: Джерело: назва).
+4. Якщо в тексті вказано джерело — обов'язково вкажи його в кінці (наприклад: Джерело: назва).
 5. Не вигадуй фактів. Якщо новина про обстріли чи трагедії — будь максимально стриманим, але якщо там про росіян чи Росію - не стримуйся.
 6. Не використовуй нумеровані списки 1, 2, 3. Просто абзаци.
 7. Не пиши довгих вступів чи прощань."""
 
-def generate_news_digest(news_items: list) -> str:
-    # Збираємо всі новини в один текст для ШІ
-    combined_text = ""
-    for item in news_items:
-        combined_text += f"НОВИНА:\n{item['text']}\n\n"
-        
+
+def generate_news_digest(news_text: str) -> str:
     response = client.models.generate_content(
-        model="gemini-3.1-flash-lite", # або та модель, яка у вас вказана в коді
-        contents=f"Ось список новин для дайджесту:\n\n{combined_text}",
+        model="gemini-3.1-flash-lite",
+        contents=f"Ось текст новини для дайджесту:\n\n{news_text}",
         config={"system_instruction": DIGEST_VOICE_SYSTEM_PROMPT}
     )
     return response.text.strip()
+
+
+def publish_news_post(text: str):
+    """Форматує пост через AI і одразу публікує в усі дозволені чати."""
+    try:
+        digest_text = generate_news_digest(text)
+        for chat_id in ALLOWED_CHAT_IDS:
+            if is_asleep(chat_id):
+                continue
+            bot.send_message(chat_id, digest_text)
+    except Exception as e:
+        print(f"Не зміг опублікувати новину: {e}")
 
 
 last_forecast_text = {"text": ""}
 
 
 def get_forecast_periods_text() -> str:
-    """Загальна функція - формує текст погодинного прогнозу по періодах.
-    Використовується і для ранкового посту, і для прямих відповідей на 'яка погода?'."""
     forecast = get_daily_forecast_data()
     return "\n".join(
         f"- {label}: {info['description']}, {info['temp']}°C (відчувається як {info['feels_like']}°C), "
@@ -317,17 +305,14 @@ def get_ua_datetime_str() -> str:
 
 
 def normalize_olegs_style(text: str) -> str:
-    """Примусово прибирає ботськість: тире, канцелярит, велику літеру на старті, емодзі після крапки."""
+    """Прибирає ботськість: тире, канцелярит, велику літеру на старті, емодзі після крапки."""
     if not text:
         return text
 
-    # 1. Всі види тире → дефіс
+    # всі види тире -> дефіс
     text = re.sub(r'[—–―]', '-', text)
-
-    # 2. Подвійні пробіли
     text = re.sub(r'\s+', ' ', text).strip()
 
-    # 3. Прибираємо канцелярські префікси
     garbage = [
         "Отже, ", "Насамперед, ", "Варто зазначити, ", "Згідно з правил",
         "Дозвольте нагадати, ", "Підсумовуючи, ", "Відповідно до ",
@@ -337,32 +322,22 @@ def normalize_olegs_style(text: str) -> str:
         if text.startswith(bad):
             text = text[len(bad):].strip()
 
-    # 4. Якщо починається з великої літери — робимо малу
     if text and text[0].isupper():
         skip_starts = ("http", "@", "#", "❤", "💀", "☠", "👋", "🤔", "👊", "🤝", "😭")
         if not text.startswith(skip_starts):
             text = text[0].lower() + text[1:]
 
-    # 5. Прибираємо зайву крапку в кінці коротких фраз
     if len(text) < 60 and text.endswith('.') and not text.endswith(('тд.', 'т.д.', 'др.')):
         text = text[:-1]
 
-    # 6. Максимум 1 емодзі, і НІКОЛИ одразу після розділового знаку.
-    # Раніше тут був баг: пунктуацію прибирали окремим regex-проходом ПІСЛЯ
-    # того як емодзі вже приліплювали назад, і якщо пробіли між ними складались
-    # по-іншому - крапка перед емодзі іноді виживала ("текст. 🤝"). Тепер робимо
-    # це одним детермінованим кроком: спочатку прибираємо емодзі і хвостову
-    # пунктуацію, і тільки потім (можливо) додаємо емодзі назад.
+    # максимум 1 емодзі, і ніколи одразу після розділового знаку
     found_emojis = EMOJI_PATTERN.findall(text)
     if found_emojis:
         text_no_emoji = EMOJI_PATTERN.sub('', text)
         text_no_emoji = re.sub(r'\s+', ' ', text_no_emoji).strip()
-        # якщо після видалення емодзі текст закінчується розділовим знаком - зрізаємо його,
-        # бо емодзі (якщо повернемо) має стояти замість крапки, а не після неї
         if text_no_emoji and text_no_emoji[-1] in '.,;:!?':
             text_no_emoji = text_no_emoji[:-1].rstrip()
 
-        # лишаємо максимум 1 емодзі, і то рідко — реальні люди не емодзять кожну репліку
         if random.random() < 0.15:
             emoji_to_keep = found_emojis[0]
             text = f"{text_no_emoji} {emoji_to_keep}".strip()
@@ -371,7 +346,6 @@ def normalize_olegs_style(text: str) -> str:
 
     text = re.sub(r'\s+', ' ', text).strip()
 
-    # 7. Якщо в тексті залишилось тільки IGNORE (модель зламалась) — повертаємо чистий IGNORE
     letters_only = re.sub(r'[^a-zA-Zа-яА-ЯіІїЇєЄґҐ]', '', text).strip().upper()
     if letters_only == "IGNORE":
         return "IGNORE"
@@ -579,13 +553,13 @@ ALLOWED_CHAT_IDS = {
 
 chat_history = defaultdict(lambda: deque(maxlen=15))
 
-COOLDOWN_SECONDS = 300  # було 180 -> 300, щоб не був такий назойливий
+COOLDOWN_SECONDS = 300
 last_ai_reply_time = defaultdict(lambda: 0)
-RANDOM_CHIME_IN_CHANCE = 0.03  # було 0.05, ще прикрутили спонтанні вривання
+RANDOM_CHIME_IN_CHANCE = 0.03
 
-# --- ПРОДОВЖЕННЯ ДІАЛОГУ: якщо бот щойно відповів юзеру, і той пише знову — підхоплюємо без кейворда/тегу
+# --- ПРОДОВЖЕННЯ ДІАЛОГУ ---
 last_replied_user = {}  # {chat_id: user_id}
-DIALOG_CONTINUATION_WINDOW = 300  # 5 хвилин на "згадати" з ким щойно говорили
+DIALOG_CONTINUATION_WINDOW = 300  # 5 хв
 
 TRIGGER_KEYWORDS = [
     "олєг", "олег", "летить", "номер",
@@ -632,24 +606,17 @@ def has_alert_keyword(text: str) -> bool:
     return any(kw in text.lower() for kw in ALERT_KEYWORDS)
 
 
-# --- СТРУКТУРОВАНИЙ СТАТУС ТРИВОГИ (щоб AI не гадав по купі сирих постів) ---
+# --- СТРУКТУРОВАНИЙ СТАТУС ТРИВОГИ ---
 
 VALKY_AREA_HINTS = [
     "валк", "мерчик", "ков'яг", "ковяг", "водолаг", "бірки",
     "богодухів", "красноград", "кегичів",
 ]
 
-SHAHED_RELEVANCE_MINUTES = 90  # старіші згадки шахедів вже неактуальні - шахед за 8 годин точно вже десь приземлився
+SHAHED_RELEVANCE_MINUTES = 90
 
 
 def get_current_alarm_status() -> str:
-    """
-    Йде по останніх постах каналу «Тривожні Валки» від найновішого до старішого
-    і повертає першу знайдену згадку тривога/відбій. Це і є 'поточний статус',
-    бо кожен новий пост про відбій/тривогу перекриває попередній (тут час не
-    фільтруємо навмисно - якщо після тривоги довго нічого нового не було,
-    це і є актуальний останній відомий стан).
-    """
     for ts, post in reversed(alerts_channel_posts):
         low = post.lower()
         if "відбій" in low:
@@ -660,18 +627,12 @@ def get_current_alarm_status() -> str:
 
 
 def get_shahed_direction_summary(max_hits: int = 3) -> str:
-    """
-    Шукає ОСТАННІ (і ТІЛЬКИ свіжі, не старші SHAHED_RELEVANCE_MINUTES) згадки
-    шахедів/ракет в напрямку Валок чи сусідніх орієнтирів. Старе навмисно
-    відкидаємо - шахед, про який писали 8 годин тому, вже давно десь
-    приземлився, і видавати цю інфу за "зараз" - дезінформація.
-    """
     now = time.time()
     hits = []
     for ts, post in reversed(alerts_channel_posts):
         age_minutes = (now - ts) / 60
         if age_minutes > SHAHED_RELEVANCE_MINUTES:
-            break  # йдемо від новіших до старіших, далі буде тільки старіше - сенсу шукати нема
+            break
         low = post.lower()
         is_threat = any(w in low for w in ["шахед", "шахід", "ракет", "реактивн"])
         is_near_valky = any(h in low for h in VALKY_AREA_HINTS)
@@ -706,28 +667,24 @@ def get_alerts_context() -> str:
 
 # --- ОБРОБНИКИ КАНАЛІВ (ТРИВОГИ ТА НОВИНИ) ---
 
-# 1. Цей хендлер забере тільки повідомлення з каналу ТРИВОГ
 @bot.channel_post_handler(func=lambda m: m.chat.id == ALERTS_CHANNEL_ID, content_types=['text'])
 def handle_alerts_channel_post(message):
     if message.text:
         alerts_channel_posts.append((time.time(), message.text.strip()))
         print(f"[ALERTS CHANNEL] Отримано пост: {message.text[:60]}...")
 
-# 2. Цей хендлер забере тільки повідомлення з каналу НОВИН
+
 @bot.channel_post_handler(func=lambda m: m.chat.id == NEWS_CHANNEL_ID, content_types=['text'])
 def handle_news_channel_post(message):
     if message.text:
-        news_channel_posts.append({
-            "id": message.message_id,
-            "text": message.text.strip(),
-            "ts": time.time(),
-        })
-        print(f"[NEWS CHANNEL] Новина додана в чергу: {message.text[:60]}...")
+        print(f"[NEWS CHANNEL] Публікую пост: {message.text[:60]}...")
+        publish_news_post(message.text.strip())
 
-# 3. Цей хендлер просто логує інші канали, якщо вони є (діагностика)
+
 @bot.channel_post_handler(content_types=['text'])
 def debug_log_other_channels(message):
     print(f"[DEBUG OTHER CHANNEL] chat_id={message.chat.id} title={message.chat.title!r}")
+
 
 @bot.message_handler(content_types=['new_chat_members'])
 def on_added_to_chat(message):
@@ -767,26 +724,21 @@ def should_call_ai(message) -> bool:
     user_id = message.from_user.id
     now = time.time()
 
-    # Якщо бот у режимі сну — ігноруємо все, крім прямого тегу адміна (не реалізовано, тому просто мовчимо)
     if is_asleep(chat_id):
         return False
 
-    # Прямий тег/реплай на бота — завжди
     if is_mentioned_or_replied(message):
         return True
 
-    # Продовження діалогу з тим самим юзером, з ким бот щойно говорив
     if chat_id in last_replied_user and last_replied_user[chat_id] == user_id:
         if now - last_ai_reply_time[chat_id] < DIALOG_CONTINUATION_WINDOW:
             return True
 
     on_cooldown = now - last_ai_reply_time[chat_id] < COOLDOWN_SECONDS
 
-    # Кейворд-тригер — під кулдауном
     if has_trigger_keyword(text):
         return not on_cooldown
 
-    # Спонтанне вривання — малий шанс навіть без кейворда
     if not on_cooldown and random.random() < RANDOM_CHIME_IN_CHANCE:
         return True
 
@@ -807,50 +759,8 @@ def run_checkin_pinger():
                 print(f"Не зміг надіслати чек-ін у {chat_id}: {e}")
 
 
-MORNING_FORECAST_HOUR = 7  # о котрій годині за Києвом постити прогноз
-MORNING_FORECAST_MINUTE = 10  # о котрій хвилині
-
-
-NEWS_CHECK_INTERVAL_HOURS = 2
-NEWS_MAX_ITEMS_PER_RUN = 3
-
-def process_pending_news(chat_ids) -> int:
-    """Збирає новини в дайджест і публікує."""
-    # Беремо тільки ті новини, які ми ще не постили
-    unposted = [n for n in news_channel_posts if n["id"] not in posted_news_ids]
-    if not unposted:
-        return 0
-
-    # Беремо максимум 3 останні новини
-    to_post = unposted[:NEWS_MAX_ITEMS_PER_RUN]
-    
-    try:
-        # Створюємо один спільний текст (дайджест)
-        digest_text = generate_news_digest(to_post)
-        
-        for chat_id in chat_ids:
-            if is_asleep(chat_id):
-                continue
-            bot.send_message(chat_id, digest_text)
-        
-        # Позначаємо ці новини як "прочитані", щоб не повторюватись
-        for item in to_post:
-            posted_news_ids.add(item["id"])
-            
-        return len(to_post)
-    except Exception as e:
-        print(f"Помилка при створенні дайджесту: {e}")
-        return 0
-
-
-
-def run_news_scheduler():
-    while True:
-        time.sleep(NEWS_CHECK_INTERVAL_HOURS * 3600)
-        try:
-            process_pending_news(ALLOWED_CHAT_IDS)
-        except Exception as e:
-            print(f"Помилка в news scheduler: {e}")
+MORNING_FORECAST_HOUR = 7
+MORNING_FORECAST_MINUTE = 10
 
 
 def run_morning_forecast_scheduler():
@@ -871,7 +781,6 @@ def run_morning_forecast_scheduler():
         except Exception as e:
             print(f"Не зміг надіслати ранковий прогноз: {e}")
 
-        # невелика пауза, щоб уникнути повторного спрацювання в ту саму хвилину
         time.sleep(60)
 
 
@@ -880,22 +789,18 @@ def handle_text(message):
     try:
         chat_id = message.chat.id
 
-        # Якщо "Новини для Олєга" насправді Group, а не Channel - пости туди
-        # приходять як звичайний message, а не channel_post. Ловимо тут окремо,
+        # якщо новинний "канал" насправді Group, а не Channel - пости приходять
+        # як звичайний message, а не channel_post. Ловимо тут окремо,
         # ДО перевірки ALLOWED_CHAT_IDS, бо цей чат в неї не входить.
         if chat_id == NEWS_CHANNEL_ID and message.text:
-            news_channel_posts.append({
-                "id": message.message_id,
-                "text": message.text.strip(),
-                "ts": time.time(),
-            })
-            print(f"[NEWS CHANNEL via message] {message.text[:120]}...")
+            print(f"[NEWS CHANNEL via message] Публікую: {message.text[:120]}...")
+            publish_news_post(message.text.strip())
             return
 
         if chat_id not in ALLOWED_CHAT_IDS:
             return
 
-        # --- КОМАНДА СНУ (тільки для реальних адмінів чату) ---
+        # --- команда сну (тільки для реальних адмінів чату) ---
         if is_sleep_command(message.text or ""):
             if not is_chat_admin(message):
                 try:
@@ -915,22 +820,6 @@ def handle_text(message):
                 print(f"Не зміг відповісти на команду сну: {e}")
             return
 
-        # --- РУЧНИЙ ТРИГЕР НОВИН (для тесту, тільки адміни) ---
-        if is_news_command(message.text or ""):
-            if not is_chat_admin(message):
-                return  # тихо ігноруємо, це не для всіх
-            try:
-                posted_count = process_pending_news([chat_id])
-                if posted_count == 0:
-                    bot.reply_to(message, random.choice([
-                        "ще не читав новин",
-                        "ще нічого не читав, порожньо там поки",
-                        "не бачив нових новин, чекай",
-                    ]))
-            except Exception as e:
-                print(f"Помилка при ручному тригері новин: {e}")
-            return
-
         chat_name = message.chat.title or "Чат"
         user_name = message.from_user.first_name or "Юзер"
         user_input = message.text or ""
@@ -944,13 +833,11 @@ def handle_text(message):
         current_datetime = get_ua_datetime_str()
         current_weather = get_weather_str()
 
-        # Якщо в повідомленні є тривожні кейворди — додаємо контекст каналу тривог
         alerts_context = ""
         if has_alert_keyword(user_input):
             alerts_context = f"\n\nДані з каналу «Тривожні Валки» (для довідки, не копіюй диспетчерські фрази):\n{get_alerts_context()}\n"
 
-        # Якщо питають про погоду на день - даємо реальний погодинний прогноз,
-        # бо без цього модель бачить лише ПОТОЧНУ погоду і вигадує решту дня з голови
+        # без цього модель бачить лише ПОТОЧНУ погоду і вигадує решту дня з голови
         weather_context = ""
         if has_weather_keyword(user_input):
             try:
@@ -979,19 +866,15 @@ def handle_text(message):
         )
         raw_answer = response.text.strip()
 
-        # ФІКС БАГИ: модель іноді пише нормальну відповідь, а в кінці ще й
-        # дописує "IGNORE" (як типу страховку). IGNORE має бути ОКРЕМОЮ повною
-        # відповіддю, а не хвостом - тому просто зрізаємо цей хвіст.
+        # модель іноді дописує "IGNORE" в кінці нормальної відповіді про всяк випадок - зрізаємо хвіст
         raw_answer = re.sub(r'\s*\bIGNORE\b\.?\s*$', '', raw_answer, flags=re.IGNORECASE).strip()
 
         answer = normalize_olegs_style(raw_answer)
 
-        # Жорстка перевірка на IGNORE — не відправляємо, якщо це чисте IGNORE
         letters_only = re.sub(r'[^a-zA-Zа-яА-ЯіІїЇєЄґҐ]', '', answer).strip().upper()
         if letters_only == "IGNORE":
             return
 
-        # Додатково: якщо відповідь порожня після нормалізації — мовчимо
         if not answer:
             return
 
@@ -1036,8 +919,5 @@ if __name__ == "__main__":
 
     forecast_thread = threading.Thread(target=run_morning_forecast_scheduler, daemon=True)
     forecast_thread.start()
-
-    news_thread = threading.Thread(target=run_news_scheduler, daemon=True)
-    news_thread.start()
 
     run_server()
