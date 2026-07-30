@@ -698,32 +698,30 @@ def get_alerts_context() -> str:
     )
 
 
-# --- ОБРОБНИК ПОСТІВ ІЗ КАНАЛУ ТРИВОГ ---
-@bot.channel_post_handler(content_types=['text'])
-def debug_log_all_channel_posts(message):
-    """ТИМЧАСОВИЙ діагностичний хендлер - логує ЛЮБИЙ channel_post без жодних
-    умов, щоб побачити чи процес взагалі отримує апдейти з якогось каналу і
-    який саме chat_id/title в них приходить. Прибрати після діагностики."""
-    print(f"[DEBUG CHANNEL POST] chat_id={message.chat.id} title={message.chat.title!r} text_start={(message.text or '')[:60]!r}")
+# --- ОБРОБНИКИ КАНАЛІВ (ТРИВОГИ ТА НОВИНИ) ---
 
-
-@bot.channel_post_handler(content_types=['text'])
+# 1. Цей хендлер забере тільки повідомлення з каналу ТРИВОГ
+@bot.channel_post_handler(func=lambda m: m.chat.id == ALERTS_CHANNEL_ID, content_types=['text'])
 def handle_alerts_channel_post(message):
-    if message.chat.id == ALERTS_CHANNEL_ID and message.text:
+    if message.text:
         alerts_channel_posts.append((time.time(), message.text.strip()))
-        print(f"[ALERTS CHANNEL] {message.text[:120]}...")
+        print(f"[ALERTS CHANNEL] Отримано пост: {message.text[:60]}...")
 
-
-@bot.channel_post_handler(content_types=['text'])
+# 2. Цей хендлер забере тільки повідомлення з каналу НОВИН
+@bot.channel_post_handler(func=lambda m: m.chat.id == NEWS_CHANNEL_ID, content_types=['text'])
 def handle_news_channel_post(message):
-    if message.chat.id == NEWS_CHANNEL_ID and message.text:
+    if message.text:
         news_channel_posts.append({
             "id": message.message_id,
             "text": message.text.strip(),
             "ts": time.time(),
         })
-        print(f"[NEWS CHANNEL] {message.text[:120]}...")
+        print(f"[NEWS CHANNEL] Новина додана в чергу: {message.text[:60]}...")
 
+# 3. Цей хендлер просто логує інші канали, якщо вони є (діагностика)
+@bot.channel_post_handler(content_types=['text'])
+def debug_log_other_channels(message):
+    print(f"[DEBUG OTHER CHANNEL] chat_id={message.chat.id} title={message.chat.title!r}")
 
 @bot.message_handler(content_types=['new_chat_members'])
 def on_added_to_chat(message):
