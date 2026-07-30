@@ -865,6 +865,18 @@ def handle_text(message):
     try:
         chat_id = message.chat.id
 
+        # Якщо "Новини для Олєга" насправді Group, а не Channel - пости туди
+        # приходять як звичайний message, а не channel_post. Ловимо тут окремо,
+        # ДО перевірки ALLOWED_CHAT_IDS, бо цей чат в неї не входить.
+        if chat_id == NEWS_CHANNEL_ID and message.text:
+            news_channel_posts.append({
+                "id": message.message_id,
+                "text": message.text.strip(),
+                "ts": time.time(),
+            })
+            print(f"[NEWS CHANNEL via message] {message.text[:120]}...")
+            return
+
         if chat_id not in ALLOWED_CHAT_IDS:
             return
 
@@ -896,8 +908,9 @@ def handle_text(message):
                 posted_count = process_pending_news([chat_id])
                 if posted_count == 0:
                     bot.reply_to(message, random.choice([
-                        "нема новин, тиша на фронті",
-                        "порожньо, нічого не кидав ще",
+                        "ще не читав новин",
+                        "ще нічого не читав, порожньо там поки",
+                        "не бачив нових новин, чекай",
                     ]))
             except Exception as e:
                 print(f"Помилка при ручному тригері новин: {e}")
