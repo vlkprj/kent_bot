@@ -45,9 +45,6 @@ ALERTS_CHANNEL_ID = -1003913134445
 alerts_channel_posts = deque(maxlen=30)  # (timestamp, text) - зберігаємо і час, щоб фільтрувати старі пости
 
 # --- НОВИННИЙ КАНАЛ (приватний, тільки для Тото) ---
-# TODO: заміни на реальний ID каналу "Новини для Олєга" після створення
-# (спосіб дізнатись ID - форварднути будь-яке повідомлення з каналу в @getidsbot,
-# і не забудь додати бота адміном в цей канал, як і з каналом тривог)
 NEWS_CHANNEL_ID = -1004344398985
 news_channel_posts = deque(maxlen=50)  # [{"id": message_id, "text": ..., "ts": ...}]
 posted_news_ids = set()  # щоб не постити одну й ту саму новину двічі за життя процесу
@@ -109,6 +106,14 @@ def get_chat_admin_ids(chat_id: int) -> set:
 
 def is_chat_admin(message) -> bool:
     return message.from_user.id in get_chat_admin_ids(message.chat.id)
+
+
+def is_news_command(text: str) -> bool:
+    """Розпізнає 'Олєг, ньюз?' і подібне - ручний тригер видати накопичені новини не чекаючи 3 год."""
+    text_lower = text.lower().strip(".,!?\"'")
+    has_name = "олєг" in text_lower or "олег" in text_lower
+    has_news_word = any(w in text_lower for w in ["ньюз", "новини"])
+    return has_name and has_news_word and len(text_lower) < 40
 
 
 # --- ПОГОДА У ВАЛКАХ (Open-Meteo, безкоштовно, без ключа) ---
@@ -794,6 +799,45 @@ MORNING_FORECAST_HOUR = 7  # о котрій годині за Києвом по
 MORNING_FORECAST_MINUTE = 10  # о котрій хвилині
 
 
+NEWS_CHECK_INTERVAL_HOURS = 3
+NEWS_MAX_ITEMS_PER_RUN = 2  # скільки новин максимум постити за один прохід, щоб не заспамити чат одразу
+
+
+def process_pending_news(chat_ids) -> int:
+    """
+    Бере до NEWS_MAX_ITEMS_PER_RUN необроблених новин і постить їх у вказані чати
+    (кожну окремим повідомленням, не одним дайджестом). Спільна логіка для
+    планувальника (раз в 3 год, весь ALLOWED_CHAT_IDS) і для ручної команди
+    "Олєг, ньюз?" (тільки поточний чат, для тесту).
+    Повертає скільки новин обробили - щоб команда могла сказати "нема новин".
+    """
+    unposted = [n for n in news_channel_posts if n["id"] not in posted_news_ids]
+    if not unposted:
+        return 0
+
+    to_post = unposted[:NEWS_MAX_ITEMS_PER_RUN]
+    for item in to_post:
+        try:
+            message_text = generate_news_message(item["text"])
+            for chat_id in chat_ids:
+                if is_asleep(chat_id):
+                    continue
+                bot.send_message(chat_id, message_text)
+            posted_news_ids.add(item["id"])
+        except Exception as e:
+            print(f"Не зміг обробити новину {item['id']}: {e}")
+    return len(to_post)
+
+
+def run_news_scheduler():
+    while True:
+        time.sleep(NEWS_CHECK_INTERVAL_HOURS * 3600)
+        try:
+            process_pending_news(ALLOWED_CHAT_IDS)
+        except Exception as e:
+            print(f"Помилка в news scheduler: {e}")
+
+
 def run_morning_forecast_scheduler():
     while True:
         now = datetime.now(KYIV_TZ)
@@ -949,5 +993,8 @@ if __name__ == "__main__":
 
     forecast_thread = threading.Thread(target=run_morning_forecast_scheduler, daemon=True)
     forecast_thread.start()
+
+    news_thread = threading.Thread(target=run_news_scheduler, daemon=True)
+    news_thread.start()
 
     run_server()
