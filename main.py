@@ -888,6 +888,21 @@ def handle_text(message):
                 print(f"Не зміг відповісти на команду сну: {e}")
             return
 
+        # --- РУЧНИЙ ТРИГЕР НОВИН (для тесту, тільки адміни) ---
+        if is_news_command(message.text or ""):
+            if not is_chat_admin(message):
+                return  # тихо ігноруємо, це не для всіх
+            try:
+                posted_count = process_pending_news([chat_id])
+                if posted_count == 0:
+                    bot.reply_to(message, random.choice([
+                        "нема новин, тиша на фронті",
+                        "порожньо, нічого не кидав ще",
+                    ]))
+            except Exception as e:
+                print(f"Помилка при ручному тригері новин: {e}")
+            return
+
         chat_name = message.chat.title or "Чат"
         user_name = message.from_user.first_name or "Юзер"
         user_input = message.text or ""
