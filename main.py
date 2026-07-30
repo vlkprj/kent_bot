@@ -42,7 +42,7 @@ UA_WEEKDAYS = {
 
 # --- КАНАЛ ТРИВОГ ---
 ALERTS_CHANNEL_ID = -1003913134445
-alerts_channel_posts = deque(maxlen=15)
+alerts_channel_posts = deque(maxlen=30)  # (timestamp, text) - зберігаємо і час, щоб фільтрувати старі пости
 
 # --- РЕЖИМ СНУ ---
 sleep_until = {}  # {chat_id: timestamp}
@@ -223,7 +223,17 @@ def generate_morning_forecast_message() -> str:
         "згадувати, якщо різниця мінімальна (1-2°C).\n"
         "Формулюй прогноз як переказ чужих слів, а не власне знання — по-різному щоразу: 'як кажуть синоптики', "
         "'якщо вірити прогнозу', 'обіцяють', 'по прогнозу виходить' і тд, вибирай різне щоразу, не повторюй одну й ту "
-        "саму фразу."
+        "саму фразу.\n\n"
+        "СЛОВНИК ПОГОДНИХ СТАНІВ (пиши природно, як людина, а не буквальний переклад коду):\n"
+        "- 'ясно' / 'переважно ясно' -> 'ясно', 'сонячно', 'небо чисте', 'ні хмарини'. НЕ кажи 'на вулиці зараз "
+        "чисто' чи подібне — звучить так, ніби хтось прибрав вулицю, а не про небо.\n"
+        "- 'хмарно' / 'частково хмарно' -> 'хмарно', 'небо затягнуте', 'хмари понабігали'.\n"
+        "- дощ/мряка/гроза — називай прямо: 'дощить', 'мрячить', 'гроза буде'.\n\n"
+        "ВАЖЛИВО ПРО ЛОГІКУ: порада що вдягнути ЗАВЖДИ має узгоджуватись із температурою, яку ти щойно назвав. "
+        "Не пиши в одному диху 'тепло, комфортно, 20 з гаком' і одразу 'вдягни штани замість шорт' — це "
+        "суперечність, 20°C це якраз шортова погода. Раджу перевдягтись у тепліше ТІЛЬКИ якщо сама температура "
+        "дійсно прохолодна (нижче ~17°C за шкалою вище), і формулюй це так, щоб рада логічно випливала з щойно "
+        "сказаної цифри, а не суперечила їй."
     )
 
     previous_note = ""
@@ -575,14 +585,18 @@ VALKY_AREA_HINTS = [
     "богодухів", "красноград", "кегичів",
 ]
 
+SHAHED_RELEVANCE_MINUTES = 90  # старіші згадки шахедів вже неактуальні - шахед за 8 годин точно вже десь приземлився
+
 
 def get_current_alarm_status() -> str:
     """
     Йде по останніх постах каналу «Тривожні Валки» від найновішого до старішого
     і повертає першу знайдену згадку тривога/відбій. Це і є 'поточний статус',
-    бо кожен новий пост про відбій/тривогу перекриває попередній.
+    бо кожен новий пост про відбій/тривогу перекриває попередній (тут час не
+    фільтруємо навмисно - якщо після тривоги довго нічого нового не було,
+    це і є актуальний останній відомий стан).
     """
-    for post in reversed(alerts_channel_posts):
+    for ts, post in reversed(alerts_channel_posts):
         low = post.lower()
         if "відбій" in low:
             return "ВІДБІЙ (є пост з каналу - тривоги зараз немає)"
@@ -593,22 +607,30 @@ def get_current_alarm_status() -> str:
 
 def get_shahed_direction_summary(max_hits: int = 3) -> str:
     """
-    Шукає останні згадки шахедів/ракет саме в напрямку Валок чи сусідніх
-    орієнтирів (Мерчик, Ков'яги, Водолага і тд), щоб дати AI конкретику
-    замість того щоб він сам вгадував по сирих постах.
+    Шукає ОСТАННІ (і ТІЛЬКИ свіжі, не старші SHAHED_RELEVANCE_MINUTES) згадки
+    шахедів/ракет в напрямку Валок чи сусідніх орієнтирів. Старе навмисно
+    відкидаємо - шахед, про який писали 8 годин тому, вже давно десь
+    приземлився, і видавати цю інфу за "зараз" - дезінформація.
     """
+    now = time.time()
     hits = []
-    for post in reversed(alerts_channel_posts):
+    for ts, post in reversed(alerts_channel_posts):
+        age_minutes = (now - ts) / 60
+        if age_minutes > SHAHED_RELEVANCE_MINUTES:
+            break  # йдемо від новіших до старіших, далі буде тільки старіше - сенсу шукати нема
         low = post.lower()
         is_threat = any(w in low for w in ["шахед", "шахід", "ракет", "реактивн"])
         is_near_valky = any(h in low for h in VALKY_AREA_HINTS)
         if is_threat and is_near_valky:
-            hits.append(post.strip().replace("\n", " / "))
+            hits.append(f"{post.strip().replace(chr(10), ' / ')} (~{int(age_minutes)} хв тому)")
         if len(hits) >= max_hits:
             break
     if not hits:
-        return "останнім часом нема конкретних згадок шахедів/ракет саме в напрямку Валок чи сусідніх орієнтирів"
-    return "останні релевантні згадки (від новішої до старішої): " + " || ".join(hits)
+        return (
+            f"за останні {SHAHED_RELEVANCE_MINUTES} хв нема конкретних згадок шахедів/ракет саме в напрямку "
+            f"Валок чи сусідніх орієнтирів (старіші згадки навмисно не рахуємо, бо вже неактуальні)"
+        )
+    return "останні СВІЖІ релевантні згадки (з позначкою скільки хвилин тому): " + " || ".join(hits)
 
 
 def get_alerts_context() -> str:
@@ -617,13 +639,14 @@ def get_alerts_context() -> str:
 
     alarm_status = get_current_alarm_status()
     shahed_summary = get_shahed_direction_summary()
+    now = time.time()
     recent = list(alerts_channel_posts)[-10:]
-    raw_posts = "\n".join(f"- {p}" for p in recent)
+    raw_posts = "\n".join(f"- (~{int((now - ts) / 60)} хв тому) {p}" for ts, p in recent)
 
     return (
         f"Поточний статус тривоги (Богодухівський р-н, куди входять Валки): {alarm_status}\n"
-        f"Про шахеди/ракети в напрямку Валок: {shahed_summary}\n\n"
-        f"Останні пости з каналу «Тривожні Валки» (сирі, для довідки, від найсвіжіших):\n{raw_posts}"
+        f"Про шахеди/ракети в напрямку Валок (враховані ТІЛЬКИ свіжі, до {SHAHED_RELEVANCE_MINUTES} хв): {shahed_summary}\n\n"
+        f"Останні пости з каналу «Тривожні Валки» (сирі, з віком кожного, від найсвіжіших):\n{raw_posts}"
     )
 
 
@@ -631,7 +654,7 @@ def get_alerts_context() -> str:
 @bot.channel_post_handler(content_types=['text'])
 def handle_alerts_channel_post(message):
     if message.chat.id == ALERTS_CHANNEL_ID and message.text:
-        alerts_channel_posts.append(message.text.strip())
+        alerts_channel_posts.append((time.time(), message.text.strip()))
         print(f"[ALERTS CHANNEL] {message.text[:120]}...")
 
 
@@ -713,8 +736,8 @@ def run_checkin_pinger():
                 print(f"Не зміг надіслати чек-ін у {chat_id}: {e}")
 
 
-MORNING_FORECAST_HOUR = 9  # о котрій годині за Києвом постити прогноз
-MORNING_FORECAST_MINUTE = 20  # о котрій хвилині
+MORNING_FORECAST_HOUR = 7  # о котрій годині за Києвом постити прогноз
+MORNING_FORECAST_MINUTE = 10  # о котрій хвилині
 
 
 def run_morning_forecast_scheduler():
@@ -747,8 +770,14 @@ def handle_text(message):
         if chat_id not in ALLOWED_CHAT_IDS:
             return
 
-        # --- КОМАНДА СНУ ---
+        # --- КОМАНДА СНУ (тільки для реальних адмінів чату) ---
         if is_sleep_command(message.text or ""):
+            if not is_chat_admin(message):
+                try:
+                    bot.reply_to(message, random.choice(SLEEP_DENIED_REPLIES))
+                except Exception as e:
+                    print(f"Не зміг відповісти на невдалу спробу сну: {e}")
+                return
             sleep_until[chat_id] = time.time() + SLEEP_DURATION
             try:
                 bot.reply_to(message, random.choice([
