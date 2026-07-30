@@ -700,6 +700,14 @@ def get_alerts_context() -> str:
 
 # --- ОБРОБНИК ПОСТІВ ІЗ КАНАЛУ ТРИВОГ ---
 @bot.channel_post_handler(content_types=['text'])
+def debug_log_all_channel_posts(message):
+    """ТИМЧАСОВИЙ діагностичний хендлер - логує ЛЮБИЙ channel_post без жодних
+    умов, щоб побачити чи процес взагалі отримує апдейти з якогось каналу і
+    який саме chat_id/title в них приходить. Прибрати після діагностики."""
+    print(f"[DEBUG CHANNEL POST] chat_id={message.chat.id} title={message.chat.title!r} text_start={(message.text or '')[:60]!r}")
+
+
+@bot.channel_post_handler(content_types=['text'])
 def handle_alerts_channel_post(message):
     if message.chat.id == ALERTS_CHANNEL_ID and message.text:
         alerts_channel_posts.append((time.time(), message.text.strip()))
